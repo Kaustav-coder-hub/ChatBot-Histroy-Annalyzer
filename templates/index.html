@@ -1,0 +1,22 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AI Search Engine</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <div class="chat-widget">
+    <h1>💬 Gemini Chat</h1>
+    <div id="chat-box" class="glass-box"></div>
+    <form id="search-form">
+      <input type="text" id="user_input" placeholder="Ask something..." autocomplete="off" required />
+      <button type="submit">Send</button>
+    </form>
+  </div>
+
+  <script type="module" src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
