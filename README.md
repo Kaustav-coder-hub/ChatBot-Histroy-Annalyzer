@@ -66,7 +66,7 @@ This project is a chatbot designed to handle both **general queries** and **brow
     ```bash
    GEMINI_API_KEY=your_api_key_here
    ```
-## ▶️ Usage
+## Usage
 1. Run the chatbot
    ```bash
    python app.py
@@ -84,7 +84,7 @@ This project is a chatbot designed to handle both **general queries** and **brow
 
    ```
 
-## 👥 Credits
+## Credits
 * General Query Solving Features: Developed by [Poushali Bhattacharyya](https://github.com/Poushali-02)
 
 * Browser History Query Handling: Added by [Kaustav](https://github.com/Kaustav-coder-hub)
