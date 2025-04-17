@@ -86,3 +86,64 @@ document.getElementById("search-form").addEventListener("submit", async function
 
   scrollToBottom();
 });
+
+// Handle the radio button below the text box
+document.getElementById("send-button").addEventListener("click", () => {
+    const userInput = document.getElementById("user-input").value;
+    const historyAccessToggle = document.getElementById("history-access-toggle").checked;
+
+    // Send the user input and history access status to the backend
+    sendToBackend(userInput, historyAccessToggle);
+});
+
+// Show the privacy popup when needed
+function showPrivacyPopup() {
+    document.getElementById("privacy-popup").style.display = "block";
+}
+
+// Handle the privacy popup submission
+document.getElementById("privacy-submit").addEventListener("click", () => {
+    const selectedOption = document.querySelector('input[name="privacy-option"]:checked').value;
+
+    // Send the selected option to the backend
+    handlePrivacyOption(selectedOption);
+
+    // Hide the popup
+    document.getElementById("privacy-popup").style.display = "none";
+});
+
+// Example function to send data to the backend
+function sendToBackend(userInput, historyAccessToggle) {
+    fetch("/search", {  // Correct endpoint
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_input: userInput, history_access_toggle: historyAccessToggle }) // Match backend keys
+    }).then(response => response.json())
+      .then(data => {
+          if (data.showPrivacyPopup) {
+              showPrivacyPopup();
+          } else {
+              displayChatbotResponse(data.response);
+          }
+      });
+}
+
+// Example function to handle privacy option
+function handlePrivacyOption(option) {
+    fetch("/privacy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ option })
+    }).then(response => response.json())
+      .then(data => {
+          displayChatbotResponse(data.response);
+      });
+}
+
+// Example function to display chatbot response
+function displayChatbotResponse(response) {
+    const chatWindow = document.getElementById("chat-window");
+    const message = document.createElement("div");
+    message.textContent = response;
+    chatWindow.appendChild(message);
+}

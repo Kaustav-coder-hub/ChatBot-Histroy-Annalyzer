@@ -15,6 +15,30 @@
       <input type="text" id="user_input" placeholder="Ask something..." autocomplete="off" required />
       <button type="submit">Send</button>
     </form>
+    <label>
+      <input type="radio" id="history-access-toggle" name="history-access" value="session">
+      Enable history access for this session
+  </label>
+  </div>
+
+  <!-- Privacy Checkpoint Popup -->
+  <div id="privacy-popup" style="display: none;">
+    <p>History access is disabled. Would you like to enable it?</p>
+    <form id="privacy-options">
+        <label>
+            <input type="radio" name="privacy-option" value="1">
+            Enable just for this session
+        </label><br>
+        <label>
+            <input type="radio" name="privacy-option" value="2">
+            Enable permanently
+        </label><br>
+        <label>
+            <input type="radio" name="privacy-option" value="3">
+            Ignore this query
+        </label><br>
+        <button type="button" id="privacy-submit">Submit</button>
+    </form>
   </div>
 
   <script type="module" src="{{ url_for('static', filename='script.js') }}"></script>

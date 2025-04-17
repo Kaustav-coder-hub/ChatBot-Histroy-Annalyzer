@@ -7,6 +7,7 @@ import sqlite3
 from datetime import datetime, timedelta
 import logging
 import shutil
+import tempfile
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -19,6 +20,9 @@ if not api_key:
     raise ValueError("GEMINI_API_KEY not found in environment variables.")
 
 genai.configure(api_key=api_key)
+
+# Add a global toggle for history-based answers
+history_access_enabled = False  # Default is OFF
 
 # --- Sentiment & Tone Detection ---
 def detect_sentiment(text: str) -> str:
@@ -155,18 +159,20 @@ def search_duckduckgo(query: str) -> str:
     except Exception as e:
         return f"Error accessing DuckDuckGo: {str(e)}"
 
-def is_browser_history_query(query):
-    """
-    Checks if the query is related to browser history.
-    """
-    history_keywords = ["browser history", "visited sites", "recent tabs", "history"]
-    return any(keyword in query.lower() for keyword in history_keywords)
+def is_browser_history_query(query: str) -> bool:
+    if not history_access_enabled:
+        logging.debug("History access is disabled.")
+        return False
+    history_keywords = ["browser history", "visited sites", "recent tabs", "history", "my history", "what did I visit"]
+    is_query_history_related = any(keyword in query.lower() for keyword in history_keywords)
+    logging.debug(f"Is query history-related? {is_query_history_related}")
+    return is_query_history_related
 
 # Function to fetch Chrome browser history
 def fetch_brave_history():
     # Path to Brave's history database
-    history_db = os.path.expanduser("~/.config/BraveSoftware/Brave-Browser/Default/History")
-    temp_db = "/tmp/Brave_History_Copy"  # Temporary copy of the database
+    history_db = os.path.expanduser("C:/Users/Startup PC 2/AppData/Local/Google/Chrome/User Data/Default/History")
+    temp_db = tempfile.NamedTemporaryFile(delete=False).name  # Temporary copy of the database
 
     try:
         # Make a copy of the database to avoid locking issues
@@ -202,6 +208,72 @@ def fetch_brave_history():
         # Clean up the temporary database copy
         if os.path.exists(temp_db):
             os.remove(temp_db)
+        logging.info("Temporary history data cleared securely.")
+
+# filepath: d:\ChatBot-Histroy-Annalyzer\search.py
+def fetch_edge_history():
+    """
+    Fetches the browsing history from Microsoft Edge's history database.
+    """
+    # Get the path to Edge's history database from environment variables
+    history_db = os.environ.get("EDGE_HISTORY_PATH")
+    if not history_db:
+        logging.error("EDGE_HISTORY_PATH is not set in environment variables.")
+        return "Error: Edge history path is not configured."
+
+    temp_db = tempfile.NamedTemporaryFile(delete=False).name  # Temporary copy of the database
+
+    try:
+        # Make a copy of the database to avoid locking issues
+        shutil.copy2(history_db, temp_db)
+
+        # Connect to the copied database
+        conn = sqlite3.connect(temp_db)
+        cursor = conn.cursor()
+
+        # Query to fetch the last 10 visited URLs
+        cursor.execute("""
+            SELECT url, title, last_visit_time
+            FROM urls
+            ORDER BY last_visit_time DESC
+            LIMIT 10
+        """)
+
+        results = cursor.fetchall()
+        conn.close()
+
+        # Format the results
+        history = []
+        for url, title, last_visit_time in results:
+            # Convert Edge's timestamp to a readable format
+            timestamp = datetime(1601, 1, 1) + timedelta(microseconds=last_visit_time)
+            history.append(f"{title} ({url}) - Last visited: {timestamp}")
+
+        return "\n".join(history)
+    except Exception as e:
+        logging.error(f"Error fetching browser history: {e}")
+        return f"Error fetching browser history: {e}"
+    finally:
+        # Clean up the temporary database copy
+        if os.path.exists(temp_db):
+            os.remove(temp_db)
+        logging.info("Temporary history data cleared securely.")
+
+def handle_privacy_checkpoint(user_input: str) -> str:
+    """
+    Handles the privacy checkpoint for history-based queries.
+    """
+    global history_access_enabled
+
+    if not history_access_enabled:
+        return (
+            "History access is disabled. Would you like to enable it?\n"
+            "Options:\n"
+            "1. Enable just for this session\n"
+            "2. Enable permanently\n"
+            "3. Ignore this query"
+        )
+    return None
 
 chat_memory = []
 
@@ -210,6 +282,11 @@ MAX_MEMORY = 20
 def search_with_gemini(user_input: str, chat_memory: list) -> str:
     # Check if the query is related to browser history
     if is_browser_history_query(user_input):
+        # Handle privacy checkpoint
+        privacy_message = handle_privacy_checkpoint(user_input)
+        if privacy_message:
+            return privacy_message
+
         # Fetch the browser history
         history = fetch_brave_history()
         return f"**Browser History:**\n{history}"  # Format the response
