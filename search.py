@@ -182,12 +182,11 @@ def fetch_brave_history():
         conn = sqlite3.connect(temp_db)
         cursor = conn.cursor()
 
-        # Query to fetch the last 10 visited URLs
+        # Query to fetch all visited URLs
         cursor.execute("""
             SELECT url, title, last_visit_time
             FROM urls
             ORDER BY last_visit_time DESC
-            LIMIT 10
         """)
 
         results = cursor.fetchall()
