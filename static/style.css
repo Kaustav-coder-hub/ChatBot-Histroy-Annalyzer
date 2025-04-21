@@ -273,3 +273,26 @@ button:hover {
   0%, 100% { opacity: 0.3; }
   50% { opacity: 1; }
 }
+
+/* #privacy-popup {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(255, 255, 255, 0.9);
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+  text-align: center;
+}
+
+#privacy-popup p {
+  margin-bottom: 15px;
+  font-size: 16px;
+  color: #333;
+}
+
+#privacy-popup button {
+  margin-top: 10px;
+} */

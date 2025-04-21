@@ -1,3 +1,5 @@
+let typingInterval;
+
 function parseMarkdownToHTML(text) {
   return text
     .replace(/&/g, "&amp;")
@@ -44,14 +46,30 @@ document.getElementById("search-form").addEventListener("submit", function (even
   event.preventDefault(); // Prevent the form from reloading the page
 
   const userInput = document.getElementById("user_input").value.trim();
+  const historyAccessToggle = document.querySelector('input[name="privacy_option"]').checked; // Check if the radio button is enabled
+
   if (!userInput) {
     alert("Please enter a query before submitting.");
     return; // Stop further execution if input is empty
   }
 
-  // Send the user input to the backend
-  sendToBackend(userInput);
+  // Check if the query is related to browser history
+  if (isBrowserHistoryQuery(userInput)) {
+    if (!historyAccessToggle) {
+      alert("History access is disabled. Please enable it to ask history-related questions.");
+      return; // Stop further execution if history access is not enabled
+    }
+  }
+
+  // Send the user input and history access status to the backend
+  sendToBackend(userInput, historyAccessToggle);
 });
+
+// Function to check if the query is related to browser history
+function isBrowserHistoryQuery(query) {
+  const historyKeywords = ["browser history", "visited sites", "recent tabs", "history", "my history", "what did I visit"];
+  return historyKeywords.some(keyword => query.toLowerCase().includes(keyword));
+}
 
 // Handle the radio button below the text box
 document.getElementById("send-button").addEventListener("click", () => {
@@ -127,7 +145,8 @@ function displayOptions(options) {
   });
 }
 
-function handleOption(option) {
+// Attach handleOption to the global window object
+window.handleOption = function(option) {
   console.log(`Selected option: ${option}`); // Debugging log
   // Send the selected option to the backend
   fetch('/privacy', {
@@ -143,12 +162,16 @@ function handleOption(option) {
     .catch(error => {
       displayChatbotResponse(`Error: ${error.message}`);
     });
-}
+};
 
-let typingInterval;
 
 function displayChatbotResponse(response) {
   const chatBox = document.getElementById("chat-box");
+
+  // Clear any existing typing interval
+  if (typingInterval) {
+    clearInterval(typingInterval);
+  }
 
   // Create a new message element for the bot
   const botMessage = document.createElement("div");

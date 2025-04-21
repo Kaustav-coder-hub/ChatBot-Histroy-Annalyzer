@@ -10,6 +10,7 @@ import shutil
 import tempfile
 from flask import session
 
+# Configure logging
 logging.basicConfig(level=logging.DEBUG)
 
 load_dotenv()
@@ -18,15 +19,19 @@ model = genai.GenerativeModel("gemini-1.5-pro-latest")
 
 api_key = os.environ.get("GEMINI_API_KEY")
 if not api_key:
+    logging.error("GEMINI_API_KEY not found in environment variables.")
     raise ValueError("GEMINI_API_KEY not found in environment variables.")
 
 genai.configure(api_key=api_key)
+logging.info("Generative AI model configured successfully.")
 
 # Add a global toggle for history-based answers
-history_access_enabled = True  # Default is OFF
+history_access_enabled = False  # Default is OFF
+logging.debug(f"History access enabled? {history_access_enabled}")
 
 # --- Sentiment & Tone Detection ---
 def detect_sentiment(text: str) -> str:
+    logging.debug(f"Detecting sentiment for text: {text}")
     lowered = text.lower()
     if any(word in lowered for word in ["sad", "depressed", "tired", "stressed", "lonely"]):
         return "sad"
@@ -37,6 +42,7 @@ def detect_sentiment(text: str) -> str:
     return "neutral"
 
 def get_tone(sentiment: str) -> str:
+    logging.debug(f"Getting tone for sentiment: {sentiment}")
     return {
         "sad": "empathetic and kind",
         "happy": "excited and cheerful",
@@ -160,9 +166,11 @@ def search_duckduckgo(query: str) -> str:
     except Exception as e:
         return f"Error accessing DuckDuckGo: {str(e)}"
 
+
+# --- Browser History Query Detection ---
 def is_browser_history_query(query: str) -> bool:
-    logging.debug(f"History access enabled: {history_access_enabled}")
-    if not history_access_enabled:
+    logging.debug(f"Checking if query is related to browser history: {query}")
+    if not session.get('history_access_enabled', False):
         logging.debug("History access is disabled.")
         return False
     history_keywords = ["browser history", "visited sites", "recent tabs", "history", "my history", "what did I visit"]
@@ -170,13 +178,16 @@ def is_browser_history_query(query: str) -> bool:
     logging.debug(f"Is query history-related? {is_query_history_related}")
     return is_query_history_related
 
+
 # Function to fetch Chrome browser history
 def fetch_brave_history(keyword=None, date=None):
+    logging.debug(f"Fetching Brave browser history with keyword: {keyword}, date: {date}")
     history_db = os.path.expanduser("~/.config/BraveSoftware/Brave-Browser/Default/History")
     temp_db = tempfile.NamedTemporaryFile(delete=False).name
 
     try:
         shutil.copy2(history_db, temp_db)
+        logging.debug(f"Copied Brave history database to temporary file: {temp_db}")
         conn = sqlite3.connect(temp_db)
         cursor = conn.cursor()
 
@@ -198,6 +209,7 @@ def fetch_brave_history(keyword=None, date=None):
             query += " WHERE " + " AND ".join(conditions)
 
         query += " ORDER BY last_visit_time DESC"
+        logging.debug(f"Executing query: {query} with params: {params}")
         cursor.execute(query, params)
         results = cursor.fetchall()
         conn.close()
@@ -207,12 +219,15 @@ def fetch_brave_history(keyword=None, date=None):
             timestamp = datetime(1601, 1, 1) + timedelta(microseconds=last_visit_time)
             history.append(f"{title} ({url}) - Last visited: {timestamp}")
 
+        logging.debug(f"Fetched {len(history)} history entries.")
         return "\n".join(history) if history else "No matching history found."
     except Exception as e:
+        logging.error(f"Error fetching browser history: {e}")
         return f"Error fetching browser history: {e}"
     finally:
         if os.path.exists(temp_db):
             os.remove(temp_db)
+        logging.info("Temporary history data cleared securely.")
 
 # filepath: d:\ChatBot-Histroy-Annalyzer\search.py
 def fetch_edge_history():
@@ -263,17 +278,23 @@ def fetch_edge_history():
             os.remove(temp_db)
         logging.info("Temporary history data cleared securely.")
 
+# --- Handle Privacy Checkpoint ---
 def handle_privacy_checkpoint(user_input: str) -> str:
+    logging.debug(f"Handling privacy checkpoint for input: {user_input}")
     if not session.get('history_access_enabled', False):
         if "enable just for this session" in user_input.lower():
             session['history_access_enabled'] = True
+            logging.info("History access enabled for this session.")
             return "History access enabled for this session. Please try your query again."
         elif "enable permanently" in user_input.lower():
             session['history_access_enabled'] = True
+            logging.info("History access enabled permanently.")
             return "History access enabled permanently. Please try your query again."
         elif "ignore this query" in user_input.lower():
+            logging.info("Ignoring the query related to browser history.")
             return "Okay, ignoring the query related to browser history."
         else:
+            logging.debug("Prompting user to enable history access.")
             return (
                 "History access is disabled. Would you like to enable it?\n"
                 "Options:\n"
@@ -287,25 +308,13 @@ chat_memory = []
 
 MAX_MEMORY = 20
 
+# --- Main Search Function ---
 def search_with_gemini(user_input: str, chat_memory: list) -> str:
-    # Check if the query is related to browser history
-    if is_browser_history_query(user_input):
-        logging.debug("Detected a browser history query.")
-        
-        # Handle privacy checkpoint
-        privacy_message = handle_privacy_checkpoint(user_input)
-        logging.debug(f"Privacy option received: {user_input}")
-        if privacy_message:
-            logging.debug("Privacy checkpoint triggered.")
-            return privacy_message
-
-        # Fetch the browser history
-        history = fetch_brave_history()
-        logging.debug("Returning browser history.")
-        return f"Browser History:\n{history}"  # Format the response
+    logging.debug(f"Processing user input: {user_input}")
 
     # Handle general queries
     if not user_input.strip():
+        logging.warning("Empty user input detected.")
         return "Please enter a valid question."
 
     try:
@@ -317,52 +326,32 @@ def search_with_gemini(user_input: str, chat_memory: list) -> str:
             "DANGEROUS": "BLOCK_NONE"
         }
 
-        # Check for follow-up questions
-        last_bot_response = chat_memory[-1]["bot_response"].lower() if chat_memory else ""
-        last_followup_asked = any(
-            followup_question.lower() in last_bot_response
-            for questions in FOLLOW_UP_QUESTIONS.values()
-            for followup_question in questions
-        )
-        user_followup_reply = any(resp in user_input.lower() for resp in FOLLOW_UP_RESPONSES)
-
         # Try DuckDuckGo for quick answers
-        if not needs_deep_answer(user_input) and not (last_followup_asked and user_followup_reply):
-            ddg_response = search_duckduckgo(user_input)
+        logging.debug("Querying DuckDuckGo for a quick answer.")
+        ddg_response = search_duckduckgo(user_input)
 
-            if ddg_response and not ddg_response.lower().startswith("i couldn't find a good answer"):
-                chat_memory.append({
-                    "user_input": user_input,
-                    "bot_response": ddg_response
-                })
-                if len(chat_memory) > MAX_MEMORY:
-                    chat_memory.pop(0)
-                return ddg_response
+        if ddg_response and not ddg_response.lower().startswith("i couldn't find a good answer"):
+            chat_memory.append({
+                "user_input": user_input,
+                "bot_response": ddg_response
+            })
+            if len(chat_memory) > MAX_MEMORY:
+                chat_memory.pop(0)
+            logging.debug("Returning DuckDuckGo response.")
+            return ddg_response
 
         # Handle deep answers using the generative model
-        is_follow_up = user_followup_reply or needs_deep_answer(user_input)
+        logging.debug("Generating a deep answer using the generative model.")
+        is_follow_up = needs_deep_answer(user_input)
         intent = detect_intent(user_input)
         sentiment = detect_sentiment(user_input)
         tone = get_tone(sentiment)
-        follow_up = random.choice(FOLLOW_UP_QUESTIONS.get(intent, [])) if not is_follow_up else ""
-        greeting = random.choice(GREETING_VARIANTS) if not chat_memory else ""
-        side_note = random.choice(SIDE_NOTES) if len(chat_memory) > 1 and not is_follow_up else ""
 
         # Context logic for generative model
-        if len(chat_memory) > 20:
-            summary_context = "\n".join(
-                f"User asked about {msg['user_input'][:30]}..." for msg in chat_memory[:-10]
-            )
-            recent_context = "\n".join(
-                f"User: {msg['user_input']}\nAssistant: {msg['bot_response']}"
-                for msg in chat_memory[-10:]
-            )
-            context = summary_context + "\n" + recent_context
-        else:
-            context = "\n".join(
-                f"User: {msg['user_input']}\nAssistant: {msg['bot_response']}"
-                for msg in chat_memory[-MAX_MEMORY:]
-            )
+        context = "\n".join(
+            f"User: {msg['user_input']}\nAssistant: {msg['bot_response']}"
+            for msg in chat_memory[-MAX_MEMORY:]
+        )
 
         # Prompt for the generative model
         prompt = f"""
@@ -371,16 +360,16 @@ You are a friendly and knowledgeable assistant who acts like a smart, human-powe
 Your job is to:
 - Provide trustworthy, accurate, and digestible information (like an informative book).
 - Sound approachable, curious, and slightly warm (not robotic).
-- Use Markdown formatting (**bold**, *italics*, bullet points, etc.) to improve clarity.
+- Use Markdown formatting (*bold, *italics, bullet points, etc.) to improve clarity.
 - Anticipate what the user might want next, and gently offer follow-up help or suggestions.
 
-**Conversation Context**:
+*Conversation Context*:
 {context}
 
-**Current User Question**:
+*Current User Question*:
 {user_input}
 
-**Tone to use**: {tone}
+*Tone to use*: {tone}
 
 ---
 
@@ -404,19 +393,19 @@ Now provide a more in-depth, structured explanation:
 '''}
 """
 
-        # Generate a response using the generative model
         response = model.generate_content(
             prompt,
             generation_config={
                 "temperature": 0.7,
                 "top_p": 1,
                 "top_k": 1,
-                "max_output_tokens": 2048 if is_follow_up else 400,
+                "max_output_tokens": 400,
             },
             safety_settings=safety_settings
         )
 
         result = response.text.strip() if response and response.text else "Sorry, I couldn't find a good answer."
+        logging.debug(f"Generated response: {result}")
 
         # Update chat memory
         chat_memory.append({
@@ -429,4 +418,5 @@ Now provide a more in-depth, structured explanation:
         return result
 
     except Exception as e:
+        logging.error(f"Error in search_with_gemini: {e}")
         return f"Error: {str(e)}"
