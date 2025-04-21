@@ -40,51 +40,17 @@ function scrollToBottom() {
   });
 }
 
-document.getElementById("search-form").addEventListener("submit", async function (e) {
-  e.preventDefault();
+document.getElementById("search-form").addEventListener("submit", function (event) {
+  event.preventDefault(); // Prevent the form from reloading the page
 
-  const userInputElem = document.getElementById("user_input");
-  const userInput = userInputElem.value.trim();
-  if (!userInput) return;
-
-  const chatBox = document.getElementById("chat-box");
-
-  chatBox.insertAdjacentHTML("beforeend", `
-    <div class="message user">
-      <div class="bubble"><strong>You:</strong> ${userInput}</div>
-    </div>
-  `);
-  scrollToBottom();
-  userInputElem.value = "";
-
-  const botMessage = document.createElement("div");
-  botMessage.className = "message bot";
-  const botBubble = document.createElement("div");
-  botBubble.className = "bubble typing";
-  botBubble.innerHTML = `<em>Thinking<span class="dots"></span></em>`;
-  botMessage.appendChild(botBubble);
-  chatBox.appendChild(botMessage);
-  scrollToBottom();
-
-  try {
-    const res = await fetch("/search", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_input: userInput }),
-    });
-
-    const data = await res.json();
-    const parsedText = parseMarkdownToHTML(data.response || "Sorry, I couldn't respond.");
-    botBubble.classList.remove("typing");
-
-    typeEffect(botBubble, parsedText, 20); // live typing
-  } catch (err) {
-    botBubble.innerHTML = `<div class="bubble error"><strong>Error:</strong> Server issue or timeout.</div>`;
-    botBubble.classList.remove("typing");
-    console.error("Fetch error:", err);
+  const userInput = document.getElementById("user_input").value.trim();
+  if (!userInput) {
+    alert("Please enter a query before submitting.");
+    return; // Stop further execution if input is empty
   }
 
-  scrollToBottom();
+  // Send the user input to the backend
+  sendToBackend(userInput);
 });
 
 // Handle the radio button below the text box
@@ -103,47 +69,132 @@ function showPrivacyPopup() {
 
 // Handle the privacy popup submission
 document.getElementById("privacy-submit").addEventListener("click", () => {
-    const selectedOption = document.querySelector('input[name="privacy-option"]:checked').value;
+  const selectedOption = document.querySelector('input[name="privacy-option"]:checked');
+  if (!selectedOption) {
+    alert("Please select an option before submitting.");
+    return;
+  }
 
-    // Send the selected option to the backend
-    handlePrivacyOption(selectedOption);
+  // Send the selected option to the backend
+  handleOption(selectedOption.value);
 
-    // Hide the popup
-    document.getElementById("privacy-popup").style.display = "none";
+  // Hide the popup
+  document.getElementById("privacy-popup").style.display = "none";
 });
 
 // Example function to send data to the backend
-function sendToBackend(userInput, historyAccessToggle) {
-    fetch("/search", {  // Correct endpoint
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_input: userInput, history_access_toggle: historyAccessToggle }) // Match backend keys
-    }).then(response => response.json())
-      .then(data => {
-          if (data.showPrivacyPopup) {
-              showPrivacyPopup();
-          } else {
-              displayChatbotResponse(data.response);
-          }
-      });
+function sendToBackend(userInput, historyAccessToggle = false) {
+  displayUserMessage(userInput);
+
+  const thinkingIndicator = document.getElementById("thinking-indicator");
+  thinkingIndicator.style.display = "block";
+
+  fetch('/search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: userInput, historyAccess: historyAccessToggle })
+  })
+    .then(response => response.json())
+    .then(data => {
+      thinkingIndicator.style.display = "none";
+
+      if (data.options) {
+        // If the backend provides options, display them to the user
+        displayChatbotResponse(data.response);
+        displayOptions(data.options);
+      } else {
+        // Otherwise, display the chatbot's response
+        displayChatbotResponse(data.response);
+      }
+    })
+    .catch(error => {
+      thinkingIndicator.style.display = "none";
+      displayChatbotResponse(`Error: ${error.message}`);
+    });
 }
 
-// Example function to handle privacy option
-function handlePrivacyOption(option) {
-    fetch("/privacy", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ option })
-    }).then(response => response.json())
-      .then(data => {
-          displayChatbotResponse(data.response);
-      });
+function displayOptions(options) {
+  const chatBox = document.getElementById("chat-box");
+  const optionsHTML = options.map(option => `<button onclick="handleOption('${option}')">${option}</button>`).join('');
+  chatBox.innerHTML += `<div class="message bot-message">${optionsHTML}</div>`;
+  scrollToBottom();
+
+  // Disable buttons after one is clicked
+  document.querySelectorAll(".option-button").forEach(button => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".option-button").forEach(btn => btn.disabled = true);
+    });
+  });
 }
 
-// Example function to display chatbot response
+function handleOption(option) {
+  console.log(`Selected option: ${option}`); // Debugging log
+  // Send the selected option to the backend
+  fetch('/privacy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ option })
+  })
+    .then(response => response.json())
+    .then(data => {
+      // Display the response from the backend
+      displayChatbotResponse(data.response);
+    })
+    .catch(error => {
+      displayChatbotResponse(`Error: ${error.message}`);
+    });
+}
+
+let typingInterval;
+
 function displayChatbotResponse(response) {
-    const chatWindow = document.getElementById("chat-window");
-    const message = document.createElement("div");
-    message.textContent = response;
-    chatWindow.appendChild(message);
+  const chatBox = document.getElementById("chat-box");
+
+  // Create a new message element for the bot
+  const botMessage = document.createElement("div");
+  botMessage.className = "bot-message"; // Add a class for styling
+  chatBox.appendChild(botMessage);
+
+  // Scroll to the bottom of the chat box
+  chatBox.scrollTo({
+    top: chatBox.scrollHeight,
+    behavior: "smooth"
+  });
+
+  // Display the response letter by letter
+  let index = 0;
+  typingInterval = setInterval(() => {
+    if (index < response.length) {
+      botMessage.innerHTML += response[index];
+      index++;
+      chatBox.scrollTo({
+        top: chatBox.scrollHeight,
+        behavior: "smooth"
+      });
+    } else {
+      clearInterval(typingInterval); // Stop the interval when all letters are displayed
+    }
+  }, 50); // Adjust the delay (in milliseconds) for the typing speed
+}
+
+// Example function to display user message
+function displayUserMessage(message) {
+  const chatBox = document.getElementById("chat-box");
+
+  // Create a new message element for the user
+  const userMessage = document.createElement("div");
+  userMessage.className = "user-message"; // Add a class for styling
+  userMessage.innerHTML = message;
+
+  // Append the user's message to the chat box
+  chatBox.appendChild(userMessage);
+
+  // Scroll to the bottom of the chat box
+  chatBox.scrollTo({
+    top: chatBox.scrollHeight,
+    behavior: "smooth"
+  });
+
+  // Clear the input field
+  document.getElementById("user_input").value = "";
 }

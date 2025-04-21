@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 import logging
 import shutil
 import tempfile
+from flask import session
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -22,7 +23,7 @@ if not api_key:
 genai.configure(api_key=api_key)
 
 # Add a global toggle for history-based answers
-history_access_enabled = False  # Default is OFF
+history_access_enabled = True  # Default is OFF
 
 # --- Sentiment & Tone Detection ---
 def detect_sentiment(text: str) -> str:
@@ -160,6 +161,7 @@ def search_duckduckgo(query: str) -> str:
         return f"Error accessing DuckDuckGo: {str(e)}"
 
 def is_browser_history_query(query: str) -> bool:
+    logging.debug(f"History access enabled: {history_access_enabled}")
     if not history_access_enabled:
         logging.debug("History access is disabled.")
         return False
@@ -169,45 +171,48 @@ def is_browser_history_query(query: str) -> bool:
     return is_query_history_related
 
 # Function to fetch Chrome browser history
-def fetch_brave_history():
-    # Path to Brave's history database
-    history_db = os.path.expanduser("C:/Users/Startup PC 2/AppData/Local/Google/Chrome/User Data/Default/History")
-    temp_db = tempfile.NamedTemporaryFile(delete=False).name  # Temporary copy of the database
+def fetch_brave_history(keyword=None, date=None):
+    history_db = os.path.expanduser("~/.config/BraveSoftware/Brave-Browser/Default/History")
+    temp_db = tempfile.NamedTemporaryFile(delete=False).name
 
     try:
-        # Make a copy of the database to avoid locking issues
         shutil.copy2(history_db, temp_db)
-
-        # Connect to the copied database
         conn = sqlite3.connect(temp_db)
         cursor = conn.cursor()
 
-        # Query to fetch all visited URLs
-        cursor.execute("""
-            SELECT url, title, last_visit_time
-            FROM urls
-            ORDER BY last_visit_time DESC
-        """)
+        query = "SELECT url, title, last_visit_time FROM urls"
+        conditions = []
+        params = []
 
+        if keyword:
+            conditions.append("(title LIKE ? OR url LIKE ?)")
+            params.extend([f"%{keyword}%", f"%{keyword}%"])
+
+        if date:
+            start_time = datetime.strptime(date, "%Y-%m-%d")
+            start_timestamp = int((start_time - datetime(1601, 1, 1)).total_seconds() * 1e6)
+            conditions.append("last_visit_time >= ?")
+            params.append(start_timestamp)
+
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+
+        query += " ORDER BY last_visit_time DESC"
+        cursor.execute(query, params)
         results = cursor.fetchall()
         conn.close()
 
-        # Format the results
         history = []
         for url, title, last_visit_time in results:
-            # Convert Brave's timestamp to a readable format
             timestamp = datetime(1601, 1, 1) + timedelta(microseconds=last_visit_time)
             history.append(f"{title} ({url}) - Last visited: {timestamp}")
 
-        return "\n".join(history)
+        return "\n".join(history) if history else "No matching history found."
     except Exception as e:
-        logging.error(f"Error fetching browser history: {e}")
         return f"Error fetching browser history: {e}"
     finally:
-        # Clean up the temporary database copy
         if os.path.exists(temp_db):
             os.remove(temp_db)
-        logging.info("Temporary history data cleared securely.")
 
 # filepath: d:\ChatBot-Histroy-Annalyzer\search.py
 def fetch_edge_history():
@@ -259,19 +264,23 @@ def fetch_edge_history():
         logging.info("Temporary history data cleared securely.")
 
 def handle_privacy_checkpoint(user_input: str) -> str:
-    """
-    Handles the privacy checkpoint for history-based queries.
-    """
-    global history_access_enabled
-
-    if not history_access_enabled:
-        return (
-            "History access is disabled. Would you like to enable it?\n"
-            "Options:\n"
-            "1. Enable just for this session\n"
-            "2. Enable permanently\n"
-            "3. Ignore this query"
-        )
+    if not session.get('history_access_enabled', False):
+        if "enable just for this session" in user_input.lower():
+            session['history_access_enabled'] = True
+            return "History access enabled for this session. Please try your query again."
+        elif "enable permanently" in user_input.lower():
+            session['history_access_enabled'] = True
+            return "History access enabled permanently. Please try your query again."
+        elif "ignore this query" in user_input.lower():
+            return "Okay, ignoring the query related to browser history."
+        else:
+            return (
+                "History access is disabled. Would you like to enable it?\n"
+                "Options:\n"
+                "1. Enable just for this session\n"
+                "2. Enable permanently\n"
+                "3. Ignore this query"
+            )
     return None
 
 chat_memory = []
@@ -281,14 +290,19 @@ MAX_MEMORY = 20
 def search_with_gemini(user_input: str, chat_memory: list) -> str:
     # Check if the query is related to browser history
     if is_browser_history_query(user_input):
+        logging.debug("Detected a browser history query.")
+        
         # Handle privacy checkpoint
         privacy_message = handle_privacy_checkpoint(user_input)
+        logging.debug(f"Privacy option received: {user_input}")
         if privacy_message:
+            logging.debug("Privacy checkpoint triggered.")
             return privacy_message
 
         # Fetch the browser history
         history = fetch_brave_history()
-        return f"**Browser History:**\n{history}"  # Format the response
+        logging.debug("Returning browser history.")
+        return f"Browser History:\n{history}"  # Format the response
 
     # Handle general queries
     if not user_input.strip():

@@ -42,7 +42,7 @@ h1 {
   color: #fff;
   text-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
-
+/* 
 #chat-box {
   max-height: 55vh;
   overflow-y: auto;
@@ -52,7 +52,7 @@ h1 {
   display: flex;
   flex-direction: column;
   gap: 10px;
-}
+} */
 
 /* Message bubbles */
 .message {
@@ -70,18 +70,6 @@ h1 {
 @keyframes fadeInMsg {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
-}
-
-.user-message {
-  align-self: flex-end;
-  background: rgba(255, 255, 255, 0.95);
-  border-bottom-right-radius: 5px;
-}
-
-.bot-message {
-  align-self: flex-start;
-  background: rgba(255, 255, 255, 0.7);
-  border-bottom-left-radius: 5px;
 }
 
 /* Input area */
@@ -114,6 +102,7 @@ button {
   font-weight: bold;
   cursor: pointer;
   transition: 0.3s ease;
+  margin-bottom: 10px;
 }
 
 button:hover {
@@ -217,4 +206,70 @@ button:hover {
   color: #000000; /* Light grey text for visibility */
   max-width: 85%;
   word-wrap: break-word;
+}
+
+/* Animation for fading in messages */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px); /* Slight slide-up effect */
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Apply the animation to user and bot messages */
+.user-message, .bot-message {
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+/* User message styling */
+.user-message {
+  /* background-color: #ffffff;
+  color: #d1e7dd; */
+  padding: 10px;
+  margin: 5px;
+  border-radius: 10px;
+  text-align: left;
+}
+
+/* Bot message styling */
+.bot-message {
+  /* background-color: #000000;
+  color: #f8d7da; */
+  padding: 10px;
+  margin: 5px;
+  border-radius: 10px;
+  text-align: left;
+}
+
+/* .glass-box {
+  width: 100%;
+  max-width: 500px;
+  padding: 20px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(15px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+} */
+
+#thinking-indicator {
+  font-size: 16px;
+  padding-left: 10px;
+  color: rgb(0, 0, 0);
+  text-align: left;
+  font-style: italic;
+  margin-top: 10px;
+  animation: fadeInOut 1.5s infinite;
+}
+
+@keyframes fadeInOut {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
 }

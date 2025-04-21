@@ -11,14 +11,18 @@
   <div class="chat-widget">
     <h1>💬 Gemini Chat</h1>
     <div id="chat-box" class="glass-box"></div>
+    <div id="thinking-indicator">Thinking...</div>
     <form id="search-form">
       <input type="text" id="user_input" placeholder="Ask something..." autocomplete="off" required />
       <button type="submit">Send</button>
     </form>
-    <label>
+    <form method="POST" action="/search">
+      <input type="radio" name="privacy_option" value="enable just for this session">  Enable history access for this session</input>
+    </form>
+    {# <label>
       <input type="radio" id="history-access-toggle" name="history-access" value="session">
       Enable history access for this session
-  </label>
+  </label> #}
   </div>
 
   <!-- Privacy Checkpoint Popup -->
@@ -40,6 +44,8 @@
         <button type="button" id="privacy-submit">Submit</button>
     </form>
   </div>
+
+  
 
   <script type="module" src="{{ url_for('static', filename='script.js') }}"></script>
 </body>

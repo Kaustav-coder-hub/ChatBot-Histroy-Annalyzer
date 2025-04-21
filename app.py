@@ -19,59 +19,47 @@ def main():
     return render_template("index.html")
 
 @app.route('/search', methods=['POST'])
-def ask():
-    global history_access_enabled
-    try:
-        data = request.get_json()
-        user_input = data.get('user_input')
-        history_access_toggle = data.get('history_access_toggle', False)  # Get toggle status from frontend
+def search():
+    data = request.get_json()
+    query = data.get('query', '').strip()
+    history_access_enabled = session.get('history_access_enabled', False)  # Check if history access is enabled
 
-        if not user_input:
-            return jsonify({"error": "No input provided"}), 400
+    logging.debug(f"Request JSON: {data}")
+    logging.debug(f"History access enabled: {history_access_enabled}")
 
-        # Enable history access for this session if the toggle is checked
-        if history_access_toggle:
-            history_access_enabled = True
+    if not history_access_enabled:
+        # Prompt the user to enable history access or proceed with a normal response
+        return jsonify({
+            "response": "History access is disabled. Would you like to enable it or proceed with a normal response?",
+            "options": ["Enable history access", "Proceed with normal response"]
+        })
 
-        # Check if the query is history-based and history access is disabled
-        if is_browser_history_query(user_input) and not history_access_enabled:
-            return jsonify({"showPrivacyPopup": True})
+    # If history access is enabled, handle the query normally
+    if is_browser_history_query(query):
+        history_response = fetch_brave_history()
+        return jsonify({"response": history_response})
 
-        # Process the query
-        chat_memory = session.get("chat_memory", [])
-        response = search_with_gemini(user_input, chat_memory)
-        chat_memory.append({"user_input": user_input, "bot_response": response})
-        chat_memory = chat_memory[-20:]
-        session["chat_memory"] = chat_memory
-        return jsonify({"response": response})
-
-    except Exception as e:
-        print(f"Error during /search: {e}")
-        return jsonify({"response": f"Error: {str(e)}"}), 500
+    # Handle general queries
+    general_response = search_duckduckgo(query)
+    return jsonify({"response": general_response})
 
 @app.route('/privacy', methods=['POST'])
 def privacy():
-    global history_access_enabled
-    try:
-        data = request.get_json()
-        option = data.get('option')
+    data = request.get_json()
+    option = data.get('option')
 
-        if option == "1":
-            history_access_enabled = True  # Enable for this session
-            response = "History access enabled for this session."
-        elif option == "2":
-            history_access_enabled = True  # Enable permanently
-            response = "History access enabled permanently."
-        elif option == "3":
-            response = "History-based query ignored."
-        else:
-            response = "Invalid option."
+    if option == "Enable history access":
+        session['history_access_enabled'] = True
+        return jsonify({"response": "History access has been enabled. You can now ask history-related questions."})
+    elif option == "Proceed with normal response":
+        return jsonify({"response": "Okay, proceeding with a normal response."})
+    else:
+        return jsonify({"response": "Invalid option selected."})
 
-        return jsonify({"response": response})
-
-    except Exception as e:
-        print(f"Error during /privacy: {e}")
-        return jsonify({"response": f"Error: {str(e)}"}), 500
+@app.route('/enable-history', methods=['POST'])
+def enable_history():
+    session['history_access_enabled'] = True  # Enable history access for the session
+    return jsonify({"response": "History access has been enabled."})
 
 if __name__ == "__main__":
     app.run(debug=True)
