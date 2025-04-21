@@ -51,7 +51,7 @@ def get_tone(sentiment: str) -> str:
     }.get(sentiment, "friendly")
 
 # --- Greeting & Side Notes ---
-GREETING_VARIANTS = [
+greeting = [
     "Hey there! 😊",
     "Hi! What’s on your mind today?",
     "Hello! Ready to explore something new?",
@@ -61,7 +61,7 @@ GREETING_VARIANTS = [
     "Welcome! What’s up?",
 ]
 
-SIDE_NOTES = [
+side_note = [
     "By the way, you asked a great question!",
     "Fun fact: this comes up a lot in interesting discussions!",
     "You're diving into a pretty cool topic.",
@@ -70,7 +70,7 @@ SIDE_NOTES = [
     "I genuinely appreciate your quriosity!"
 ]
 
-FOLLOW_UP_QUESTIONS = {
+follow_up = {
     "explore": [
         "Would you like to explore this further?",
         "Want me to break it down more?",
