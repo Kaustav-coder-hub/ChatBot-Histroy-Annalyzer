@@ -9,6 +9,17 @@ import logging
 import shutil
 import tempfile
 from flask import session
+import spacy
+
+# Load SpaCy language model
+nlp = spacy.load("en_core_web_sm")
+
+# Define history-related intents and keywords
+# These keywords are used to identify if the user is asking about their browser history
+history_keywords = [
+    "browser history", "visited sites", "recent tabs", "history", "my history", "what did I visit",
+    "last week", "yesterday", "today", "past searches", "recent activity"
+]
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -173,7 +184,7 @@ def is_browser_history_query(query: str) -> bool:
     if not session.get('history_access_enabled', False):
         logging.debug("History access is disabled.")
         return False
-    history_keywords = ["browser history", "visited sites", "recent tabs", "history", "my history", "what did I visit"]
+    
     is_query_history_related = any(keyword in query.lower() for keyword in history_keywords)
     logging.debug(f"Is query history-related? {is_query_history_related}")
     return is_query_history_related
@@ -200,7 +211,11 @@ def fetch_brave_history(keyword=None, date=None):
             params.extend([f"%{keyword}%", f"%{keyword}%"])
 
         if date:
-            start_time = datetime.strptime(date, "%Y-%m-%d")
+            # Parse the date into a timestamp
+            try:
+                start_time = datetime.strptime(date, "%Y-%m-%d")
+            except ValueError:
+                start_time = datetime.now() - timedelta(days=1)  # Default to yesterday if parsing fails
             start_timestamp = int((start_time - datetime(1601, 1, 1)).total_seconds() * 1e6)
             conditions.append("last_visit_time >= ?")
             params.append(start_timestamp)
@@ -311,6 +326,22 @@ MAX_MEMORY = 20
 # --- Main Search Function ---
 def search_with_gemini(user_input: str, chat_memory: list) -> str:
     logging.debug(f"Processing user input: {user_input}")
+    
+    # Detect intent and entities
+    intent, entities = detect_intent_and_entities(user_input)
+    logging.debug(f"Detected intent: {intent}, entities: {entities}")
+
+    if intent == "history":
+        # Handle history-related queries
+        if not session.get('history_access_enabled', False):
+            return (
+                "History access is disabled. Please enable it to ask history-related questions."
+            )
+
+        # Fetch browser history based on entities (e.g., date)
+        date = entities.get("date")
+        history_response = fetch_brave_history(date=date)
+        return f"Browser History:\n{history_response}"
 
     # Handle general queries
     if not user_input.strip():
@@ -420,3 +451,29 @@ Now provide a more in-depth, structured explanation:
     except Exception as e:
         logging.error(f"Error in search_with_gemini: {e}")
         return f"Error: {str(e)}"
+
+
+
+def detect_intent_and_entities(query: str):
+    """
+    Detects the intent and extracts entities from the user query.
+    """
+    doc = nlp(query.lower())
+    intent = "general"
+    entities = {}
+
+    # Check for history-related intent
+    if any(keyword in query.lower() for keyword in history_keywords):
+        intent = "history"
+
+    # Extract date-related entities
+    for ent in doc.ents:
+        if ent.label_ in ["DATE", "TIME"]:
+            entities["date"] = ent.text
+
+    # Extract keywords for filtering history
+    keywords = [token.text for token in doc if token.is_alpha and token.text not in history_keywords]
+    if keywords:
+        entities["keywords"] = keywords
+
+    return intent, entities
