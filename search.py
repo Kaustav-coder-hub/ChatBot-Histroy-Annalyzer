@@ -347,7 +347,7 @@ def search_with_gemini(user_input: str, chat_memory: list) -> str:
 
         # Fetch browser history based on entities (e.g., date)
         date = entities.get("date")
-        history_response = fetch_brave_history(date=date)
+        history_response = fetch_browser_history(date=date)
         return f"Browser History:\n{history_response}"
 
     # Handle general queries
