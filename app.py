@@ -1,8 +1,10 @@
 from flask import Flask, render_template, request, jsonify, session
 import os
 from dotenv import load_dotenv
-from search import search_with_gemini, is_browser_history_query, fetch_brave_history, search_duckduckgo, chat_memory
+from search import search_with_gemini, is_browser_history_query, fetch_browser_history, search_duckduckgo, chat_memory
 import logging
+from os_browser import detect_os_and_browser, get_browser_history_path
+
 
 load_dotenv()
 
@@ -26,6 +28,9 @@ def search():
 
     # Update session with the history access status
     session['history_access_enabled'] = history_access
+    user_agent = request.headers.get('User-Agent', '')
+    os_name, browser_name = detect_os_and_browser(user_agent)
+    history_path = get_browser_history_path(os_name, browser_name)
     logging.debug(f"Request JSON: {data}")
     logging.debug(f"History access enabled: {session.get('history_access_enabled')}")
 
@@ -39,7 +44,7 @@ def search():
             })
 
         # If history access is enabled, fetch the browser history
-        history_response = fetch_brave_history()
+        history_response = fetch_browser_history(history_path)
         return jsonify({"response": history_response})
 
     # Handle normal queries

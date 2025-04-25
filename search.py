@@ -1,3 +1,4 @@
+from os_browser import detect_os_and_browser, get_browser_history_path
 import os
 import google.generativeai as genai
 from dotenv import load_dotenv
@@ -191,9 +192,15 @@ def is_browser_history_query(query: str) -> bool:
 
 
 # Function to fetch Chrome browser history
-def fetch_brave_history(keyword=None, date=None):
-    logging.debug(f"Fetching Brave browser history with keyword: {keyword}, date: {date}")
-    history_db = os.path.expanduser("C:/Users/Startup PC 2/AppData/Local/Microsoft/Edge/User Data/Default/History")
+def fetch_browser_history(history_db, keyword=None, date=None):
+    """
+    Fetches browser history from the specified history database path.
+    """
+    logging.debug(f"Fetching browser history from: {history_db} with keyword: {keyword}, date: {date}")
+    # history_db = os.path.expanduser("C:/Users/Startup PC 2/AppData/Local/Microsoft/Edge/User Data/Default/History")
+    if not history_db or not os.path.exists(history_db):
+        return "Error: Browser history path is invalid or does not exist."
+    
     temp_db = tempfile.NamedTemporaryFile(delete=False).name
 
     try:
