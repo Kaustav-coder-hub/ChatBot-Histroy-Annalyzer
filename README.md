@@ -54,7 +54,8 @@ This project is a chatbot designed to handle both **general queries** and **brow
 2. Create a virtual environment:
    ```bash
    python -m venv DDC-Chatbot-Search-Engine-env
-   source DDC-Chatbot-Search-Engine-env/bin/activate
+   source DDC-Chatbot-Search-Engine-env/bin/activate     # for Linux
+   .\DDC-Chatbot-Search-Engine-env\Scripts\activate      # for Windows
    ```
 3. Install dependencies
    ```bash

@@ -193,7 +193,7 @@ def is_browser_history_query(query: str) -> bool:
 # Function to fetch Chrome browser history
 def fetch_brave_history(keyword=None, date=None):
     logging.debug(f"Fetching Brave browser history with keyword: {keyword}, date: {date}")
-    history_db = os.path.expanduser("~/.config/BraveSoftware/Brave-Browser/Default/History")
+    history_db = os.path.expanduser("C:/Users/Startup PC 2/AppData/Local/Microsoft/Edge/User Data/Default/History")
     temp_db = tempfile.NamedTemporaryFile(delete=False).name
 
     try:
