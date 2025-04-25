@@ -1,4 +1,3 @@
-from os_browser import detect_os_and_browser, get_browser_history_path
 import os
 import google.generativeai as genai
 from dotenv import load_dotenv
@@ -180,50 +179,21 @@ def search_duckduckgo(query: str) -> str:
 
 
 # --- Browser History Query Detection ---
-def is_browser_history_query(query: str) -> tuple[bool, dict]:
-    """
-    Checks if the query is related to browser history and extracts relevant entities.
-    Returns a tuple (is_history_query, entities).
-    """
+def is_browser_history_query(query: str) -> bool:
     logging.debug(f"Checking if query is related to browser history: {query}")
     if not session.get('history_access_enabled', False):
         logging.debug("History access is disabled.")
-        return False, {}
-
-    # Check if the query is history-related
+        return False
+    
     is_query_history_related = any(keyword in query.lower() for keyword in history_keywords)
     logging.debug(f"Is query history-related? {is_query_history_related}")
-
-    if not is_query_history_related:
-        return False, {}
-
-    # Extract additional entities (e.g., keywords, time frames)
-    entities = {}
-    doc = nlp(query.lower())
-
-    # Extract keywords
-    keywords = [token.text for token in doc if token.is_alpha and token.text not in history_keywords]
-    if keywords:
-        entities["keyword"] = " ".join(keywords)
-
-    # Extract time frames
-    for ent in doc.ents:
-        if ent.label_ == "DATE":
-            entities["date"] = ent.text
-
-    return True, entities
+    return is_query_history_related
 
 
 # Function to fetch Chrome browser history
-def fetch_browser_history(history_db, keyword=None, date=None):
-    """
-    Fetches browser history from the specified history database path.
-    """
-    logging.debug(f"Fetching browser history from: {history_db} with keyword: {keyword}, date: {date}")
-    # history_db = os.path.expanduser("C:/Users/Startup PC 2/AppData/Local/Microsoft/Edge/User Data/Default/History")
-    if not history_db or not os.path.exists(history_db):
-        return "Error: Browser history path is invalid or does not exist."
-    
+def fetch_brave_history(keyword=None, date=None):
+    logging.debug(f"Fetching Brave browser history with keyword: {keyword}, date: {date}")
+    history_db = os.path.expanduser("~/.config/BraveSoftware/Brave-Browser/Default/History")
     temp_db = tempfile.NamedTemporaryFile(delete=False).name
 
     try:
@@ -241,11 +211,11 @@ def fetch_browser_history(history_db, keyword=None, date=None):
             params.extend([f"%{keyword}%", f"%{keyword}%"])
 
         if date:
+            # Parse the date into a timestamp
             try:
-                # Parse the date into a timestamp
                 start_time = datetime.strptime(date, "%Y-%m-%d")
             except ValueError:
-                start_time = datetime.now() - timedelta(days=7)  # Default to last 7 days if parsing fails
+                start_time = datetime.now() - timedelta(days=1)  # Default to yesterday if parsing fails
             start_timestamp = int((start_time - datetime(1601, 1, 1)).total_seconds() * 1e6)
             conditions.append("last_visit_time >= ?")
             params.append(start_timestamp)
@@ -358,15 +328,21 @@ def search_with_gemini(user_input: str, chat_memory: list) -> str:
     logging.debug(f"Processing user input: {user_input}")
     
     # Detect intent and entities
-    # Check if the query is related to browser history
-    is_history_query, entities = is_browser_history_query(user_input)
-    if is_history_query:
-        keyword = entities.get("keyword")
+    intent, entities = detect_intent_and_entities(user_input)
+    logging.debug(f"Detected intent: {intent}, entities: {entities}")
+
+    if intent == "history":
+        # Handle history-related queries
+        if not session.get('history_access_enabled', False):
+            return (
+                "History access is disabled. Please enable it to ask history-related questions."
+            )
+
+        # Fetch browser history based on entities (e.g., date)
         date = entities.get("date")
-        history_response = fetch_browser_history(keyword=keyword, date=date)
-        return history_response
-    
-    
+        history_response = fetch_brave_history(date=date)
+        return f"Browser History:\n{history_response}"
+
     # Handle general queries
     if not user_input.strip():
         logging.warning("Empty user input detected.")
@@ -477,3 +453,27 @@ Now provide a more in-depth, structured explanation:
         return f"Error: {str(e)}"
 
 
+
+def detect_intent_and_entities(query: str):
+    """
+    Detects the intent and extracts entities from the user query.
+    """
+    doc = nlp(query.lower())
+    intent = "general"
+    entities = {}
+
+    # Check for history-related intent
+    if any(keyword in query.lower() for keyword in history_keywords):
+        intent = "history"
+
+    # Extract date-related entities
+    for ent in doc.ents:
+        if ent.label_ in ["DATE", "TIME"]:
+            entities["date"] = ent.text
+
+    # Extract keywords for filtering history
+    keywords = [token.text for token in doc if token.is_alpha and token.text not in history_keywords]
+    if keywords:
+        entities["keywords"] = keywords
+
+    return intent, entities
